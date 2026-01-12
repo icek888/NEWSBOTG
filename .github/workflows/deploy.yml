@@ -7,7 +7,7 @@ on:
   workflow_dispatch:  # Ручной запуск из GitHub UI
 
 env:
-  # Используем GitHub Container Registry (можно заменить на Docker Hub)
+  # Используем GitHub Container Registry
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
@@ -53,37 +53,13 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Deploy to server via SSH
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          port: ${{ secrets.SERVER_PORT || 22 }}
-          script_stop: true
-          script: |
-            # Переходим в директорию проекта
-            cd /opt/newsautotg || exit 1
-
-            # Получаем имя образа
-            IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
-
-            echo "Pulling image: $IMAGE_TAG"
-            echo ${{ secrets.GITHUB_TOKEN }} | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
-
-            # Пулл последнего образа
-            docker pull $IMAGE_TAG
-
-            # Обновляем docker-compose для использования нового образа
-            sed -i "s|image: .*|image: $IMAGE_TAG|" docker-compose.prod.yml || true
-
-            # Перезапускаем контейнеры
-            echo "Restarting containers..."
-            docker-compose -f docker-compose.prod.yml down
-            docker-compose -f docker-compose.prod.yml up -d
-
-            # Проверяем статус
-            echo "Container status:"
-            docker-compose -f docker-compose.prod.yml ps
-
-            echo "Deploy completed!"
+      - name: Image pushed notification
+        run: |
+          echo "## Image pushed! :rocket:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Image:** ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Pull command:**" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
