@@ -2,9 +2,8 @@ version: '3.8'
 
 services:
   app:
-    # Образ из GitHub Container Registry
-    # Будет обновляться при деплое
-    image: ghcr.io/icek888/newsbotg:latest
+    # Образ из Docker Hub (публичный)
+    image: docker.io/icewind777/newsbotg:latest
     container_name: newsbotg
     restart: unless-stopped
     ports:

@@ -1,15 +1,15 @@
-# Продакшен-деплой: Инструкция
+# Продакшен-деплой: Инструкция (Docker Hub)
 
 ## Схема работы
 
 ```
-Git Push → https://github.com/icek888/NEWSBOTG
+Git Push → github.com/icek888/NEWSBOTG
                      |
-                     └─→ GitHub Actions: Build & Push to ghcr.io
-                         (тебё приходит уведомление с командой pull)
+                     └─→ GitHub Actions: Build & Push to Docker Hub
+                         (публичный образ - можно качать без токена)
 
 Ты руками на сервере:
-  docker pull ghcr.io/icek888/newsbotg:latest
+  docker pull icewind777/newsbotg:latest
   docker-compose -f docker-compose.prod.yml up -d
 ```
 
@@ -19,10 +19,33 @@ Git Push → https://github.com/icek888/NEWSBOTG
 
 При пуше в `main`:
 1. Собирает Docker образ
-2. Пушит в `ghcr.io/icek888/newsbotg:latest`
+2. Пушит в `docker.io/icewind777/newsbotg:latest` (Docker Hub)
 3. Показывает команду для pull в Summary
 
-**Secrets НЕ нужны!** Используется встроенный `GITHUB_TOKEN`.
+---
+
+## Необходимые настройки
+
+### 1. Docker Hub токен
+
+1. Зарегистрируйся на https://hub.docker.com (если нет)
+2. Перейди в Account Settings → Security
+3. Создай Access Token
+4. Добавь токен в GitHub Secrets:
+
+**GitHub Repo → Settings → Secrets and variables → Actions → New repository secret:**
+
+| Name | Secret |
+|------|--------|
+| `DOCKERHUB_TOKEN` | твой_dockerhub_token |
+
+### 2. Сделай Docker Hub образ публичным
+
+1. Перейди на https://hub.docker.com/u/icewind777/
+2. Найди репозиторий `newsbotg`
+3. Settings → Visibility → **Public**
+
+Теперь образ можно скачивать без авторизации!
 
 ---
 
@@ -90,27 +113,16 @@ docker-compose -f docker-compose.prod.yml logs -f app
 
 ---
 
-## Ручной деплой (каждый раз)
+## Ручной деплой
 
-### Способ 1: Из GitHub Summary
-
-После пуша в main зайди в GitHub Actions → последний запуск → Summary
-
-Там будет команда:
-```bash
-docker pull ghcr.io/icek888/newsbotg:latest
-```
-
-### Способ 2: Быстрый скрипт на сервере
-
-Создай файл `deploy.sh` на сервере:
+### На сервере (deploy.sh)
 
 ```bash
 #!/bin/bash
 cd /opt/newsbotg
 
 echo "Pulling new image..."
-docker pull ghcr.io/icek888/newsbotg:latest
+docker pull icewind777/newsbotg:latest
 
 echo "Restarting containers..."
 docker-compose -f docker-compose.prod.yml up -d
@@ -127,7 +139,7 @@ docker-compose -f docker-compose.prod.yml logs --tail=20 app
 chmod +x deploy.sh
 ```
 
-Теперь деплой одной командой:
+Деплой одной командой:
 ```bash
 ./deploy.sh
 ```
@@ -137,118 +149,35 @@ chmod +x deploy.sh
 ## Команды управления
 
 ```bash
-# Логи (в реальном времени)
+# Логи
 docker-compose -f docker-compose.prod.yml logs -f
 
-# Статус контейнеров
+# Статус
 docker-compose -f docker-compose.prod.yml ps
 
 # Перезапуск
 docker-compose -f docker-compose.prod.yml restart
 
-# Полная остановка
+# Остановка
 docker-compose -f docker-compose.prod.yml down
-
-# Войти в контейнер
-docker-compose -f docker-compose.prod.yml exec app bash
 ```
 
 ---
 
-## Локальный запуск
-
-### С PostgreSQL (как в проде)
+## Проверка Docker Hub
 
 ```bash
-docker-compose up -d
-```
+# На сервере проверь доступность образа
+docker pull icewind777/newsbotg:latest
 
-### С SQLite (для разработки)
-
-```bash
-python -m app.main
-```
-
----
-
-## Резервное копирование
-
-### PostgreSQL dump
-
-```bash
-# Одноразовый бэкап
-docker-compose -f docker-compose.prod.yml exec db pg_dump -U newsuser newsdb > backup_$(date +%Y%m%d).sql
-
-# Восстановление
-cat backup_20250112.sql | docker-compose -f docker-compose.prod.yml exec -T db psql -U newsuser newsdb
-```
-
-### Автоматический бэкап (cron)
-
-Добавь в crontab (`crontab -e`):
-
-```bash
-# Бэкап каждый день в 2 ночи
-0 2 * * * cd /opt/newsbotg && docker-compose -f docker-compose.prod.yml exec -T db pg_dump -U newsuser newsdb > /backups/news_$(date +\%Y\%m\%d).sql
-```
-
----
-
-## Траблшутинг
-
-### Контейнер не стартует
-
-```bash
-# Логи
-docker-compose -f docker-compose.prod.yml logs app
-
-# Статус
-docker-compose -f docker-compose.prod.yml ps
-
-# Проверить конфиг
-docker-compose -f docker-compose.prod.yml config
-```
-
-### Бот не отвечает
-
-```bash
-# Проверить .env
-docker-compose -f docker-compose.prod.yml exec app python -c "from app.config import settings; print(settings.telegram_bot_token)"
-
-# Проверить логи
-docker-compose -f docker-compose.prod.yml logs app | grep -i telegram
-```
-
-### PostgreSQL проблемы
-
-```bash
-# Логи БД
-docker-compose -f docker-compose.prod.yml logs db
-
-# Подключиться к БД
-docker-compose -f docker-compose.prod.yml exec db psql -U newsuser newsdb
-
-# Проверить подключение из app
-docker-compose -f docker-compose.prod.yml exec app python -c "from app.database import engine; print(engine.url)"
-```
-
----
-
-## Структура файлов
-
-```
-/opt/newsbotg/
-├── .env                    # твоя конфигурация
-├── docker-compose.prod.yml # продакшен compose
-├── bot_session.session     # telegram сессия
-├── images/                 # кэш изображений
-└── deploy.sh               # скрипт деплоя (опционально)
+# Если не работает - проверь публичность:
+# https://hub.docker.com/u/icewind777/
 ```
 
 ---
 
 ## Полезные ссылки
 
+- Docker Hub: https://hub.docker.com/u/icewind777/
 - GitHub Actions: https://github.com/icek888/NEWSBOTG/actions
-- Container Registry: https://ghcr.io/icek888/newsbotg
 - GitHub Issues: https://github.com/icek888/NEWSBOTG/issues
