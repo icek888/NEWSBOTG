@@ -1,0 +1,84 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+ai_news.db
+
+# Telegram session
+bot_session.session
+bot_session.session-journal
+*.session
+
+# Alembic
+alembic/versions/*.pyc
+
+# Logs
+*.log
+logs/
+
+# Images cache
+images/cache/
+
+# My PyCharm/IDE
+.idea/
+*.iml
+.out/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Documentation drafts
+*.md.backup
+*.md.old
+PLAN.md
+COMPARISON.md
+AIEDITORPLAN.md
+NEWLYFIXES.md
+IDEAS1.md
+AI_IMPLEMENTATION_PLAN.md
+AI_EDITOR_CHANGES.md
+FIXES_APPLIED.md
+SCORING_AUTOPILOT_PLAN.md
