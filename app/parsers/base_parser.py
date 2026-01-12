@@ -7,7 +7,7 @@ from sqlalchemy import select
 from app.database import AsyncSessionLocal
 from app.models.base import News
 from app.utils.logger import setup_logger
-from datetime import datetime
+from datetime import datetime, timezone
 
 log = setup_logger(__name__)
 
@@ -134,31 +134,36 @@ class BaseParser:
                 return None
         return None
 
+    @staticmethod
+    def to_utc_naive(dt: datetime | None) -> datetime | None:
+        """
+        Приводим дату к UTC-naive, чтобы писать в TIMESTAMP WITHOUT TIME ZONE.
+        """
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            return dt  # считаем уже naive (желательно чтобы это был UTC)
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+
     async def save_article(self, article: Dict) -> bool:
-        """
-        Сохраняет статью в БД.
-        Возвращает True, если статья новая и сохранена,
-        False — если дубликат или ошибка.
-        """
         url = self.normalize_url(article["url"])
-        publish_dt = self.parse_dt(article.get("publish_date"))
+        publish_dt = self.to_utc_naive(self.parse_dt(article.get("publish_date")))
 
         async with AsyncSessionLocal() as db:
             try:
-                # 1️⃣ дедуп по URL
-                stmt = select(News).where(News.url == article["url"])
+                # ✅ дедуп по нормализованному URL
+                stmt = select(News).where(News.url == url)
                 res = await db.execute(stmt)
                 if res.scalar_one_or_none():
                     return False
 
-                # 2️⃣ создаём запись
                 news = News(
                     source_id=self.source.id,
                     title=article.get("title"),
                     content=article.get("content"),
-                    url=article["url"],
+                    url=url,  # ✅ сохраняем нормализованный URL
                     image_url=article.get("image_url"),
-                    publish_date=publish_dt,
+                    publish_date=publish_dt,  # ✅ теперь naive
                     is_published=False,
                     is_breaking=article.get("is_breaking", False),
                 )
