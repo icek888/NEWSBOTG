@@ -190,6 +190,7 @@ class NewsBot:
                 from app.database import AsyncSessionLocal
                 from app.models.base import Source
                 from app.parsers.github_trending_parser import GitHubTrendingParser
+                from sqlalchemy import select
 
                 async with AsyncSessionLocal() as s:
                     res = await s.execute(
