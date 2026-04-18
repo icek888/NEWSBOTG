@@ -38,8 +38,10 @@ class NewsBot:
             await event.respond(
                 "🤖 AI News Hub\n\n"
                 "Команды:\n"
-                "/review — показать новость на модерацию\n"
-                "/review N — показать N новостей\n"
+                "/review — новость на модерацию\n"
+                "/review_github — GitHub репозиторий\n"
+                "/github — найти новые GitHub репозитории\n"
+                "/parse — парсинг всех источников\n"
                 "/stats 7 — статистика за 7 дней\n"
                 "/pending — сколько на модерации\n"
                 "/lang ru — русский\n"
@@ -57,17 +59,24 @@ class NewsBot:
 
         @self.client.on(events.NewMessage(pattern=r"^/review(\s+(\d+))?$"))
         async def review_handler(event: events.NewMessage.Event):
-            # Ограничиваем до админ-чата
             if str(event.chat_id) != str(settings.telegram_admin_chat_id):
                 await event.respond("⛔ Команда доступна только в админ-чате.")
                 return
 
-            # Парсим количество (пока не используется для batch)
             limit = None
             if event.pattern_match.group(2):
                 limit = int(event.pattern_match.group(2))
 
-            await self.publisher.send_next_for_review(limit=limit)
+            await self.publisher.send_next_for_review(
+                limit=limit, source_filter="exclude_github"
+            )
+
+        @self.client.on(events.NewMessage(pattern=r"^/review_github$"))
+        async def review_github_handler(event: events.NewMessage.Event):
+            """Показать GitHub репозиторий на модерацию"""
+            if str(event.chat_id) != str(settings.telegram_admin_chat_id):
+                return
+            await self.publisher.send_next_for_review(source_filter="github_only")
 
         @self.client.on(events.CallbackQuery())
         async def callback_handler(event: events.CallbackQuery.Event):

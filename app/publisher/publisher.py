@@ -112,28 +112,27 @@ class Publisher:
 
     # ---------- selection logic ----------
 
-    async def _get_next_candidate_for_review(self, db) -> Optional[News]:
+    async def _get_next_candidate_for_review(self, db, source_filter: str = None) -> Optional[News]:
         """
-        Берём следующую новость для ревью:
-        - is_published = false
-        - нет publication со статусом rejected/postponed/published
-        - и не была уже отправлена в review (чтобы не спамить админа)
+        Берём следующую новость для ревью с опциональным фильтром по источнику.
+        source_filter: None (all), 'github_only', 'exclude_github'
         """
         pub = aliased(Publication)
 
-        # Идея: выбираем News, у которых нет записи Publication вообще,
-        # или есть запись, но не в конечных статусах.
-        # В MVP проще: если есть publication вообще — считаем что уже обработано/показано.
-        # Тогда создаём publication при первом показе (review) и всё.
         stmt = (
             select(News)
             .where(News.is_published == False)  # noqa: E712
             .outerjoin(pub, pub.news_id == News.id)
-            .where(pub.id.is_(None))  # еще не попадала в очередь модерации
-            .order_by(News.created_at.asc())
-            .limit(1)
+            .where(pub.id.is_(None))
         )
 
+        # Фильтр по источнику
+        if source_filter == "github_only":
+            stmt = stmt.where(News.title.ilike("%GitHub: %"))
+        elif source_filter == "exclude_github":
+            stmt = stmt.where(News.title.notilike("%GitHub: %"))
+
+        stmt = stmt.order_by(News.created_at.asc()).limit(1)
         res = await db.execute(stmt)
         return res.scalars().first()
 
@@ -392,18 +391,19 @@ class Publisher:
 
     # ---------- public API ----------
 
-    async def send_next_for_review(self, limit: Optional[int] = None) -> None:
+    async def send_next_for_review(self, limit: Optional[int] = None, source_filter: str = None) -> None:
         """
         Отправляет сырую новость на модерацию в админ-чат.
-        Создаёт Publication(status='review_raw'), чтобы не показывать её снова.
-
-        Args:
-            limit: пока не используется, оставлен для будущего batch режима
+        source_filter: None (all), 'github_only', 'exclude_github'
         """
         async for db in get_session():
-            news = await self._get_next_candidate_for_review(db)
+            news = await self._get_next_candidate_for_review(db, source_filter=source_filter)
             if not news:
-                await self.client.send_message(settings.telegram_admin_chat_id, "Нет новостей на модерацию.")
+                label = "GitHub " if source_filter == "github_only" else ""
+                await self.client.send_message(
+                    settings.telegram_admin_chat_id,
+                    f"Нет {label}новостей на модерацию."
+                )
                 return
 
             text = self._build_review_message(news)
