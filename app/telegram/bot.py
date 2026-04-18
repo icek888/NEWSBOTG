@@ -167,6 +167,58 @@ class NewsBot:
                 parse_mode="html"
             )
 
+        @self.client.on(events.NewMessage(pattern=r"^/parse$"))
+        async def parse_handler(event: events.NewMessage.Event):
+            """Запустить парсинг всех источников вручную"""
+            if str(event.chat_id) != str(settings.telegram_admin_chat_id):
+                return
+            await event.respond("🔄 Запускаю парсинг...")
+            try:
+                from app.main import parse_all_sources
+                await parse_all_sources()
+                await event.respond("✅ Парсинг завершён")
+            except Exception as e:
+                await event.respond(f"❌ Ошибка: {e}")
+
+        @self.client.on(events.NewMessage(pattern=r"^/github$"))
+        async def github_handler(event: events.NewMessage.Event):
+            """Запустить парсинг GitHub вручную"""
+            if str(event.chat_id) != str(settings.telegram_admin_chat_id):
+                return
+            await event.respond("🔧 Ищу trending GitHub репозитории...")
+            try:
+                from app.database import AsyncSessionLocal
+                from app.models.base import Source
+                from app.parsers.github_trending_parser import GitHubTrendingParser
+
+                async with AsyncSessionLocal() as s:
+                    res = await s.execute(
+                        select(Source).where(Source.name == "GitHub Trending")
+                    )
+                    src = res.scalars().first()
+
+                if not src:
+                    await event.respond("❌ Источник GitHub Trending не найден в БД")
+                    return
+
+                parser = GitHubTrendingParser(src)
+                articles = await parser.parse(max_repos=5)
+                await parser.close()
+
+                if not articles:
+                    await event.respond("📭 Нет новых репозиториев")
+                    return
+
+                for a in articles:
+                    await event.respond(
+                        f"🔧 <b>{a['title']}</b>\n\n{a['content'][:500]}\n\n🔗 {a['url']}",
+                        parse_mode="html"
+                    )
+                await event.respond(f"✅ Найдено {len(articles)} репозиториев")
+            except Exception as e:
+                import traceback
+                await event.respond(f"❌ Ошибка: {e}\n{traceback.format_exc()[-500:]}")
+
         @self.client.on(events.NewMessage())
         async def text_handler(event: events.NewMessage.Event):
             """Обработка текстовых сообщений для edit/regen режимов"""

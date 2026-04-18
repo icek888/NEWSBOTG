@@ -39,7 +39,7 @@ class AnalyticsTracker:
     async def get_stats(self, days: int = 7) -> dict:
         """Получить сводную статистику за N дней"""
         async for db in get_session():
-            since = datetime.now(timezone.utc) - timedelta(days=days)
+            since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
 
             # Опубликованные за период
             pub_count = await db.execute(
