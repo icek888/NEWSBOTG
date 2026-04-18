@@ -11,11 +11,12 @@ from sqlalchemy import select
 from app.config import settings
 from app.utils.logger import setup_logger
 from app.database import engine, Base, AsyncSessionLocal
-from app.models.base import Source, News, Publication  # Added Publication
+from app.models.base import Source, News, Publication
 from app.telegram.bot import NewsBot
 from app.parsers.techcrunch_parser import TechCrunchParser
 from app.parsers.theverge_parser import TheVergeParser
 from app.parsers.github_trending_parser import GitHubTrendingParser
+from sqlalchemy import select
 
 PUB_REVIEW_RAW = "review_raw"
 
@@ -101,7 +102,6 @@ async def parse_all_sources():
             from app.models.base import Publication
             async with AsyncSessionLocal() as session:
                 # Находим новости без Publication
-                from sqlalchemy import select
                 news_no_pub = await session.execute(
                     select(News)
                     .outerjoin(Publication, Publication.news_id == News.id)
