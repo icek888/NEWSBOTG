@@ -105,7 +105,7 @@ def _render_channel_post_from_draft(news: News, draft: dict) -> str:
 
     if news.url:
         if is_github:
-            parts.append(f'\n🔗 <a href="{news.url}">{news.url.replace("https://", "")}</a>')
+            parts.append(f'\n🔗 {news.url}')
         else:
             parts.append(f'\n<a href="{news.url}">Source</a>')
 
