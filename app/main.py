@@ -11,11 +11,13 @@ from sqlalchemy import select
 from app.config import settings
 from app.utils.logger import setup_logger
 from app.database import engine, Base, AsyncSessionLocal
-from app.models.base import Source, News # Убедись, что импорты моделей верны
+from app.models.base import Source, News, Publication  # Added Publication
 from app.telegram.bot import NewsBot
 from app.parsers.techcrunch_parser import TechCrunchParser
 from app.parsers.theverge_parser import TheVergeParser
 from app.parsers.github_trending_parser import GitHubTrendingParser
+
+PUB_REVIEW_RAW = "review_raw"
 
 # Настройка логирования, чтобы видеть ВСЁ
 logging.basicConfig(level=logging.INFO)
@@ -92,10 +94,30 @@ async def parse_all_sources():
 
     logger.info(f"✅ Парсинг завершен. Новых статей: {total_new}")
 
-    # Авто-показ в админке: если есть новые статьи — кинем 1 черновик
+    # Авто-показ в админке: если есть новые статьи — отправим в модерацию
     if total_new > 0:
         try:
-            # метод должен жить в Publisher: send_next_for_review()
+            # Отправляем все новые статьи в модерацию автоматически
+            from app.models.base import Publication
+            async with AsyncSessionLocal() as session:
+                # Находим новости без Publication
+                from sqlalchemy import select
+                news_no_pub = await session.execute(
+                    select(News)
+                    .outerjoin(Publication, Publication.news_id == News.id)
+                    .where(Publication.id.is_(None))
+                    .where(News.is_published == False)
+                    .limit(20)
+                )
+                for n in news_no_pub.scalars().all():
+                    session.add(Publication(news_id=n.id, status=PUB_REVIEW_RAW))
+                await session.commit()
+                logger.info(f"📬 {news_no_pub.scalars().all().__len__()} новостей отправлено в модерацию")
+        except Exception as e:
+            logger.error(f"❌ Не удалось создать Publications: {e}", exc_info=True)
+
+        # Показать 1 черновик в админке
+        try:
             await telegram_bot.publisher.send_next_for_review()
         except Exception as e:
             logger.error(f"❌ Не удалось отправить черновик в админ-чат: {e}", exc_info=True)
