@@ -15,11 +15,11 @@ logger = setup_logger(__name__)
 
 # GitHub search topics for AI repos
 AI_TOPICS = [
-    ("topic:ai+topic:tool", "stars:>30"),
-    ("topic:llm+topic:agent", "stars:>20"),
-    ("topic:machine-learning+topic:framework", "stars:>50"),
-    ("topic:generative-ai", "stars:>30"),
-    ("topic:artificial-intelligence+language:python", "stars:>50"),
+    ("topic:ai", "stars:10..2000"),
+    ("topic:llm", "stars:10..2000"),
+    ("topic:machine-learning", "stars:10..2000"),
+    ("topic:generative-ai", "stars:10..2000"),
+    ("topic:ai-agents", "stars:10..2000"),
 ]
 
 
@@ -72,10 +72,12 @@ class GitHubTrendingParser(BaseParser):
                             per_page: int = 3) -> List[Dict]:
         """Поиск по GitHub Search API"""
         cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%d")
+        # Ищем проекты созданные за последние 6 месяцев (свежие)
+        created_after = (datetime.now(timezone.utc) - timedelta(days=180)).strftime("%Y-%m-%d")
 
         url = "https://api.github.com/search/repositories"
         params = {
-            "q": f"{topic} {stars_filter} pushed:>{cutoff}",
+            "q": f"{topic} {stars_filter} pushed:>{cutoff} created:>{created_after}",
             "sort": "stars",
             "order": "desc",
             "per_page": per_page,
