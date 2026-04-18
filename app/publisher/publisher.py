@@ -83,7 +83,10 @@ def _render_channel_post_from_draft(news: News, draft: dict) -> str:
     meaning = _sanitize_html_text(draft.get("meaning") or "")
     tags = _as_hashtags(draft.get("tags") or [])
 
-    parts = [f"🧠 <b>{headline}</b>"]
+    is_github = "GitHub: " in news.title or "github.com" in (news.url or "")
+    icon = "🔧" if is_github else "🧠"
+
+    parts = [f"{icon} <b>{headline}</b>"]
 
     if bullets:
         lines = []
@@ -101,7 +104,10 @@ def _render_channel_post_from_draft(news: News, draft: dict) -> str:
         parts.append(f"\n{tags}")
 
     if news.url:
-        parts.append(f'\n<a href="{news.url}">Source</a>')
+        if is_github:
+            parts.append(f'\n🔗 <a href="{news.url}">{news.url.replace("https://", "")}</a>')
+        else:
+            parts.append(f'\n<a href="{news.url}">Source</a>')
 
     return "\n\n".join([p for p in parts if p])
 
