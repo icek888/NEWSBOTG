@@ -25,8 +25,9 @@ class AIEditor:
         system_prompt: str,
         user_prompt: str,
         model: str,
+        max_retries: int = 3,
     ) -> str:
-        """Вызов OpenRouter API"""
+        """Вызов OpenRouter API с retry"""
 
         if not settings.openrouter_api_key:
             raise ValueError("OPENROUTER_API_KEY не настроен в .env")
@@ -47,27 +48,51 @@ class AIEditor:
             "max_tokens": settings.ai_max_tokens,
         }
 
-        # Для моделей, поддерживающих JSON response format
-        # Если модель не поддерживает, AI всё равно должен вернуть JSON
         try:
             payload["response_format"] = {"type": "json_object"}
         except Exception:
-            pass  # Некоторые модели не поддерживают этот параметр
+            pass
 
-        logger.info(f"Calling OpenRouter with model: {model}")
+        last_error = None
+        for attempt in range(max_retries):
+            try:
+                logger.info(f"Calling OpenRouter (attempt {attempt + 1}/{max_retries}) model: {model}")
 
-        response = await self.client.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers=headers,
-            json=payload,
-        )
+                response = await self.client.post(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    headers=headers,
+                    json=payload,
+                )
 
-        if response.status_code != 200:
-            logger.error(f"OpenRouter API error: {response.status_code} - {response.text}")
-            response.raise_for_status()
+                if response.status_code == 429:
+                    wait = 2 ** (attempt + 1)
+                    logger.warning(f"Rate limited, waiting {wait}s...")
+                    import asyncio
+                    await asyncio.sleep(wait)
+                    continue
 
-        data = response.json()
-        return data["choices"][0]["message"]["content"]
+                if response.status_code >= 500:
+                    wait = 2 ** attempt
+                    logger.warning(f"Server error {response.status_code}, retry in {wait}s...")
+                    import asyncio
+                    await asyncio.sleep(wait)
+                    continue
+
+                if response.status_code != 200:
+                    logger.error(f"OpenRouter API error: {response.status_code} - {response.text}")
+                    response.raise_for_status()
+
+                data = response.json()
+                return data["choices"][0]["message"]["content"]
+
+            except (httpx.TimeoutException, httpx.ConnectError) as e:
+                last_error = e
+                wait = 2 ** attempt
+                logger.warning(f"Network error: {e}, retry in {wait}s...")
+                import asyncio
+                await asyncio.sleep(wait)
+
+        raise RuntimeError(f"OpenRouter failed after {max_retries} retries: {last_error}")
 
     async def create_draft(
         self,
@@ -85,6 +110,10 @@ class AIEditor:
         """
 
         prompt_key = f"editor_{lang}"
+
+        # GitHub репозитории используют свой промпт
+        if source and "GitHub" in source:
+            prompt_key = "editor_github"
         system_prompt = await self.prompt_manager.get_prompt(prompt_key)
 
         if not system_prompt:

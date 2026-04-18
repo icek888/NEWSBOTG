@@ -1,42 +1,51 @@
 import os
-import requests
-from PIL import Image
+import hashlib
 import io
-from app.config import settings
+import aiohttp
+from PIL import Image
+from app.utils.logger import setup_logger
+
+logger = setup_logger(__name__)
 
 
 class ImageProcessor:
-    def __init__(self):
-        self.cache_dir = "images/cache"
+    def __init__(self, cache_dir: str = "images/cache"):
+        self.cache_dir = cache_dir
         os.makedirs(self.cache_dir, exist_ok=True)
-    
-    async def process_image(self, image_url: str, news_id: int) -> str:
-        """Обработка изображения для Telegram"""
-        # Проверяем кэш
+
+    async def process_image(self, image_url: str, news_id: int) -> str | None:
+        """Асинхронная обработка изображения для Telegram"""
         cached_path = self._get_cached_path(image_url, news_id)
         if os.path.exists(cached_path):
             return cached_path
-        
-        # Скачиваем изображение
+
         try:
-            response = requests.get(image_url, timeout=10)
-            response.raise_for_status()
-            
-            # Открываем изображение
-            img = Image.open(io.BytesIO(response.content))
-            
+            async with aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=15)
+            ) as session:
+                async with session.get(image_url) as resp:
+                    if resp.status != 200:
+                        logger.warning(f"Image download failed: {resp.status} for {image_url}")
+                        return None
+                    data = await resp.read()
+
+            img = Image.open(io.BytesIO(data))
+
+            # Конвертируем RGBA → RGB если нужно
+            if img.mode in ("RGBA", "P"):
+                img = img.convert("RGB")
+
             # Оптимизируем для Telegram
             img.thumbnail((1200, 630), Image.LANCZOS)
-            
-            # Сохраняем
-            img.save(cached_path, 'JPEG', quality=85, optimize=True)
+            img.save(cached_path, "JPEG", quality=85, optimize=True)
+
+            logger.info(f"Image cached: {cached_path}")
             return cached_path
-            
+
         except Exception as e:
-            print(f"Error processing image: {e}")
+            logger.error(f"Error processing image {image_url}: {e}")
             return None
-    
+
     def _get_cached_path(self, image_url: str, news_id: int) -> str:
-        """Генерация пути для кэшированного изображения"""
-        filename = f"{news_id}_{hash(image_url)}.jpg"
-        return os.path.join(self.cache_dir, filename)
+        url_hash = hashlib.md5(image_url.encode()).hexdigest()[:12]
+        return os.path.join(self.cache_dir, f"{news_id}_{url_hash}.jpg")

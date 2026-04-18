@@ -15,6 +15,7 @@ from app.models.base import Source, News # Убедись, что импорты
 from app.telegram.bot import NewsBot
 from app.parsers.techcrunch_parser import TechCrunchParser
 from app.parsers.theverge_parser import TheVergeParser
+from app.parsers.github_trending_parser import GitHubTrendingParser
 
 # Настройка логирования, чтобы видеть ВСЁ
 logging.basicConfig(level=logging.INFO)
@@ -33,7 +34,8 @@ async def init_db_data():
             logger.info("🌱 База пуста. Добавляю стандартные источники...")
             sources = [
                 Source(name="TechCrunch", url="https://techcrunch.com/category/artificial-intelligence/"),
-                Source(name="The Verge", url="https://www.theverge.com/ai-artificial-intelligence")
+                Source(name="The Verge", url="https://www.theverge.com/ai-artificial-intelligence"),
+                Source(name="GitHub Trending", url="https://github.com/topics/ai"),
             ]
             session.add_all(sources)
             await session.commit()
@@ -61,6 +63,8 @@ async def parse_all_sources():
                 parser = TechCrunchParser(source)
             elif "The Verge" in source.name:
                 parser = TheVergeParser(source)
+            elif "GitHub" in source.name:
+                parser = GitHubTrendingParser(source)
 
             if not parser:
                 logger.error(f"❌ Нет реализации парсера для источника: {source.name}")

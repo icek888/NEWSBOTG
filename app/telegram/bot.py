@@ -2,6 +2,7 @@ import asyncio
 from telethon import TelegramClient, events
 from app.config import settings
 from app.publisher.publisher import Publisher
+from app.analytics.analytics import AnalyticsTracker
 from app.utils.logger import setup_logger
 logger = setup_logger(__name__)
 
@@ -18,6 +19,7 @@ class NewsBot:
         self.ready = asyncio.Event()
 
         self.publisher = Publisher(self.client)
+        self.analytics = AnalyticsTracker()
 
         # State management для edit/regen режимов
         # {user_id: {"mode": "edit"|"regen", "news_id": 123}}
@@ -38,8 +40,10 @@ class NewsBot:
                 "Команды:\n"
                 "/review — показать новость на модерацию\n"
                 "/review N — показать N новостей\n"
-                "/lang ru — переключить на русский\n"
-                "/lang en — переключить на английский\n"
+                "/stats 7 — статистика за 7 дней\n"
+                "/pending — сколько на модерации\n"
+                "/lang ru — русский\n"
+                "/lang en — английский\n"
                 f"\nТекущий язык: {current_lang.upper()}"
             )
 
@@ -142,6 +146,26 @@ class NewsBot:
                 await event.respond("✅ Операция отменена")
             else:
                 await event.respond("Нет активной операции")
+
+        @self.client.on(events.NewMessage(pattern=r"^/stats(\s+(\d+))?$"))
+        async def stats_handler(event: events.NewMessage.Event):
+            """Показать статистику"""
+            if str(event.chat_id) != str(settings.telegram_admin_chat_id):
+                return
+            days = int(event.pattern_match.group(2) or 7)
+            msg = await self.analytics.format_stats_message(days)
+            await event.respond(msg, parse_mode="html")
+
+        @self.client.on(events.NewMessage(pattern=r"^/pending$"))
+        async def pending_handler(event: events.NewMessage.Event):
+            """Показать сколько новостей ждёт модерации"""
+            if str(event.chat_id) != str(settings.telegram_admin_chat_id):
+                return
+            stats = await self.analytics.get_stats(days=30)
+            await event.respond(
+                f"⏳ На модерации: <b>{stats['pending_review']}</b> новостей",
+                parse_mode="html"
+            )
 
         @self.client.on(events.NewMessage())
         async def text_handler(event: events.NewMessage.Event):
