@@ -474,16 +474,35 @@ class Publisher:
             if draft_data:
                 post_text = _render_channel_post_from_draft(news, draft_data)
                 logger.info(f"Publishing with AI draft JSON for news {news_id}")
+            elif pub and pub.draft_text:
+                post_text = pub.draft_text
+                logger.info(f"Publishing with AI draft TEXT for news {news_id}")
             else:
-                # Fallback: если есть draft_text — используем его, иначе сырой
-                if pub and pub.draft_text:
-                    post_text = pub.draft_text
-                    logger.info(f"Publishing with AI draft TEXT for news {news_id}")
-                else:
+                # Нет AI draft — генерируем автоматически
+                logger.info(f"No AI draft for news {news_id}, generating before publish...")
+                try:
+                    from app.ai_editor.editor import AIEditor
+                    editor = AIEditor()
+                    # Определяем язык по source
+                    is_github = "GitHub: " in news.title
+                    lang = "en" if is_github else "ru"
+                    draft_data = await editor.edit_news(news, lang=lang)
+                    if draft_data:
+                        post_text = _render_channel_post_from_draft(news, draft_data)
+                        # Сохраняем draft в Publication
+                        if pub:
+                            pub.draft_json = json.dumps(draft_data, ensure_ascii=False)
+                            pub.status = PUB_AI_DRAFT_READY
+                        logger.info(f"AI draft generated and used for news {news_id}")
+                    else:
+                        post_text = self._build_channel_post(news)
+                except Exception as e:
+                    logger.error(f"AI draft generation failed: {e}, using raw content")
                     post_text = self._build_channel_post(news)
-                    logger.info(f"Publishing with raw content for news {news_id}")
 
             # 2) Публикуем: если есть image_url — отправляем как FILE с caption
+            is_github = "GitHub: " in news.title or "github.com" in (news.url or "")
+
             if news.image_url:
                 msg = await self.client.send_file(
                     settings.telegram_channel_id,
@@ -496,7 +515,7 @@ class Publisher:
                     settings.telegram_channel_id,
                     post_text,
                     parse_mode="html",
-                    link_preview=False,
+                    link_preview=is_github,
                 )
 
             await db.execute(
