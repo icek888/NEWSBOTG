@@ -12,6 +12,7 @@ services:
       # Монтируем сессию telegram и изображения
       - ./bot_session.session:/app/bot_session.session
       - ./images:/app/images
+      - ./app/main.py:/app/app/main.py
     env_file:
       - .env
     environment:
