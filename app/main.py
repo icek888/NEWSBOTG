@@ -96,17 +96,9 @@ async def parse_all_sources():
     logger.info(f"✅ Парсинг завершен. Новых статей: {total_new}")
 
     # Авто-отправка статей в админ-чат на модерацию
-    # Отправляем до 5 новостей за цикл (новые + застрявшие)
+    # Отправляем по 1 новости за цикл
     try:
-        sent = 0
-        for _ in range(5):
-            try:
-                await telegram_bot.publisher.send_next_for_review()
-                sent += 1
-            except Exception:
-                break
-        if sent > 0:
-            logger.info(f"📬 {sent} новостей отправлено на модерацию")
+        await telegram_bot.publisher.send_next_for_review()
     except Exception as e:
         logger.error(f"❌ Не удалось отправить черновик в админ-чат: {e}", exc_info=True)
 
