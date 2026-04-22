@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Optional
 import httpx
 
@@ -146,6 +147,13 @@ Source: {source}
                 user_prompt=user_prompt,
                 model=model,
             )
+
+            # Убираем markdown обёртку если модель обернула JSON
+            result_text = result_text.strip()
+            md_match = re.match(r'^```(?:json)?\s*\n?(.*?)\n?\s*```$', result_text, re.DOTALL)
+            if md_match:
+                result_text = md_match.group(1).strip()
+                logger.info("Stripped markdown code block from AI response")
 
             # Парсим JSON ответ
             result = json.loads(result_text)
