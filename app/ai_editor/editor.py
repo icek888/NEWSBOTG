@@ -84,7 +84,12 @@ class AIEditor:
                     response.raise_for_status()
 
                 data = response.json()
-                return data["choices"][0]["message"]["content"]
+                content = data["choices"][0]["message"]["content"]
+                if content is None:
+                    # Модель вернула null в content — логируем и возвращаем None
+                    logger.warning(f"Model returned null content. Finish reason: {data['choices'][0].get('finish_reason', 'unknown')}")
+                    logger.warning(f"Full response: {json.dumps(data, ensure_ascii=False)[:500]}")
+                return content
 
             except (httpx.TimeoutException, httpx.ConnectError) as e:
                 last_error = e
@@ -147,6 +152,10 @@ Source: {source}
                 user_prompt=user_prompt,
                 model=model,
             )
+
+            # Проверка на пустой ответ модели
+            if result_text is None:
+                raise ValueError("AI returned empty content (None) — model likely failed to generate JSON")
 
             # Убираем markdown обёртку если модель обернула JSON
             result_text = result_text.strip()
