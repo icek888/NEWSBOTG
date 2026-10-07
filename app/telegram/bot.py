@@ -272,29 +272,55 @@ class NewsBot:
 
     async def run(self):
         """
-        Запуск бота. Важно: выставляем ready после успешного start().
+        Запуск бота с авто-переподключением.
+        Telethon может упасть после 5 неудач (ConnectionError).
+        Без этого create_task в main.py молча умирает, и бот становится
+        зомби: парсер крутится, но send_message → 'Cannot send requests while disconnected'.
         """
         logger.info("Starting Telegram bot...")
 
-        try:
-            await self.client.start(bot_token=settings.telegram_bot_token)
-            self.ready.set()
-            logger.info("Bot started (READY).")
+        max_retries = 5
+        retry_delay = 10  # seconds between retries
 
-            # Пинг в админ-чат для проверки, что chat_id и права верные
+        for attempt in range(1, max_retries + 1):
             try:
-                await self.client.send_message(
-                    settings.telegram_admin_chat_id,
-                    "✅ Bot started and ready.",
-                )
-            except Exception:
-                logger.exception("Failed to send ping to admin chat. Check chat_id and bot permissions.")
+                await self.client.start(bot_token=settings.telegram_bot_token)
+                self.ready.set()
+                logger.info(f"Bot started (READY), attempt {attempt}/{max_retries}.")
 
-            await self.client.run_until_disconnected()
+                # Пинг в админ-чат для проверки, что chat_id и права верные
+                try:
+                    await self.client.send_message(
+                        settings.telegram_admin_chat_id,
+                        "✅ Bot started and ready.",
+                    )
+                except Exception:
+                    logger.exception("Failed to send ping to admin chat. Check chat_id and bot permissions.")
 
-        except Exception:
-            logger.exception("Bot failed to start")
-            raise
+                # run_until_disconnected returns when connection drops
+                await self.client.run_until_disconnected()
+
+                # If we reach here, connection dropped gracefully
+                logger.warning("Telegram connection dropped. Will retry...")
+                self.ready.clear()
+
+            except Exception as e:
+                logger.exception(f"Bot connection failed (attempt {attempt}/{max_retries}): {e}")
+                self.ready.clear()
+                try:
+                    await self.client.disconnect()
+                except Exception:
+                    pass
+
+            # Retry with delay (unless this was the last attempt)
+            if attempt < max_retries:
+                logger.info(f"Retrying in {retry_delay}s...")
+                await asyncio.sleep(retry_delay)
+                retry_delay = min(retry_delay * 2, 60)  # exponential backoff, cap 60s
+
+        logger.error(f"Bot failed to connect after {max_retries} attempts. Giving up.")
+        # Don't raise — let the app keep running (parser still works)
+        # The container's restart: unless-stopped will handle full crashes
 
     async def stop(self):
         try:
